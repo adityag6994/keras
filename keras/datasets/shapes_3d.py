@@ -2,21 +2,17 @@ __author__ = 'Jake Varley'
 
 import numpy as np
 import math
-import theano
-
-"""
-    Creating dataset with two categories of 3D shapes, Sphere, Diamond and Cube.
-    Each sample is described by 3d voxel points, stored in a 3D array.
-    The voxel points that define a shape (or part of a shape) are set to
-    true(1), the background points to false(0).
-"""
+import random
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
 
 def load_data(test_split=0.2, dataset_size=5000, patch_size=32):
     """
     Description
     -----------
     creates a dataset with total "dataset_size" samples.
-    Class of a sample (sphere, Diamond, and cube) is chosen at random with equal probability.
+    Class of a sample (sphere, and cube) is chosen at random with equal probability.
     Based on the "test_split", the dataset is divided in test and train subsets.
     The "patch_size" defines the size of a 3D array for storing voxel.
 
@@ -41,10 +37,11 @@ def load_data(test_split=0.2, dataset_size=5000, patch_size=32):
     if patch_size < 10:
        raise NotImplementedError
 
-    num_labels = 3
+    num_labels = 2
         
     # Using same probability for each class
     geometry_types = np.random.randint(0, num_labels, dataset_size)
+    random.shuffle(geometry_types)
 
     # Getting the training set
     y_train = geometry_types[0:abs((1-test_split)*dataset_size)]
@@ -66,7 +63,7 @@ def __generate_solid_figures(geometry_types, patch_size):
 
     Arguments
         geometry_types: numpy array (samples, 1)
-             An array of class labels (0 for sphere, 1 for Diamond and 2 for cube)
+             An array of class labels (0 for sphere, 1 for cube)
         patch_size: int
              Size of 3d array to store voxel
 
@@ -78,10 +75,9 @@ def __generate_solid_figures(geometry_types, patch_size):
 
     # Allocate 3D data array, data is in cube(all dimensions are same)
     solid_figures = np.zeros((len(geometry_types), 1, patch_size,
-                                  patch_size, patch_size), dtype=np.bool)
-
-    for i in xrange(shapes_no):
-        # radius is a random number in [3, self.patch_size/2)
+                                  patch_size, patch_size))
+    for i in range(0, len(geometry_types)):
+        # # radius is a random number in [3, self.patch_size/2)
         radius = (patch_size/2 - 3) * np.random.rand() + 3
 
         # bounding box values for optimization
@@ -100,16 +96,9 @@ def __generate_solid_figures(geometry_types, patch_size):
                         if (x-x0)**2 + (y-y0)**2 + (z-z0)**2 <= radius_squared:
                             # inside the sphere
                             solid_figures[i, 0, z, x, y] = 1
-        elif geometry_types[i] == 1: #Diamond
-                for z in xrange(z_min, z_max+1):
-                    for x in xrange(x_min, x_max+1):
-                        for y in xrange(y_min, y_max+1):
-                            if abs(x-x0) + abs(y-y0) + abs(z-z0) <= radius:
-                                # inside the diamond
-                                solid_figures[i, z, 0, x, y] = 1
-        elif geometry_types[i] == 2: #Cube
+        elif geometry_types[i] == 1: #Cube
             solid_figures[i, 0, z_min:z_max+1, x_min:x_max+1, y_min:y_max+1] = 1
         else:
             raise NotImplementedError
 
-        return solid_figures
+    return solid_figures

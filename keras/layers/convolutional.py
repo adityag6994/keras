@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import theano
 import theano.tensor as T
 from theano.tensor.signal import downsample
-
+from theano.tensor.nnet import conv3d2d
 from .. import activations, initializations, regularizers, constraints
 from ..utils.theano_utils import shared_zeros, on_gpu
 from ..layers.core import Layer
@@ -366,24 +366,39 @@ class Convolution3D(Layer):
                 pad_x = (self.nb_row - self.subsample[1]) // 2
                 pad_y = (self.nb_col - self.subsample[2]) // 2
 
-                X = ZeroPadding3D(X,(pad_z, pad_x, pad_y))
+                input_shape = X.shape
+                output_shape = (input_shape[0], input_shape[1],
+                                input_shape[2] + 2 * pad_z,
+                                input_shape[3] + 2 * pad_x,
+                                input_shape[4] + 2 * pad_y)
+                output = T.zeros(output_shape)
+                indices = (slice(None), slice(None),
+                           slice(pad_z, input_shape[2] + pad_z),
+                           slice(pad_x, input_shape[3] + pad_x),
+                           slice(pad_y, input_shape[4] + pad_y))
+                T.set_subtensor(output[indices], X)
+                X = output
 
         border_mode = 'valid'
 
         if on_gpu():
             # Shuffle the dimensions as per the input parameter order, restore it once done
-            conv_out = theano.tensor.nnet.conv3d2d.conv3d(signals=X.dimshuffle(0, 2, 1, 3, 4),
-                                                          filters=self.W.dimshuffle(0, 2, 1, 3, 4),
-                                                          filters_shape=self.W_shape.dimshuffle(0, 2, 1, 3, 4),
-                                                          border_mode=border_mode)
+            W_shape = (self.W_shape[0], self.W_shape[2], self.W_shape[1],
+                       self.W_shape[3],self.W_shape[4])
+
+            conv_out = conv3d2d.conv3d(signals=X.dimshuffle(0, 2, 1, 3, 4),
+                                       filters=self.W.dimshuffle(0, 2, 1, 3, 4),
+                                       filters_shape=W_shape,
+                                       border_mode=border_mode)
+
             conv_out = conv_out.dimshuffle(0, 2, 1, 3, 4)
             self.W = self.W.dimshuffle(0, 2, 1, 3, 4)
-            self.W_shape = self.W_shape.dimshuffle(0, 2, 1, 3, 4)
+            
         else:
             # Shuffle the dimensions as per the input parameter order, restore it once done
-            conv_out = theano.tensor.nnet.conv3D(V=X.dimshuffle(0, 3, 4, 2, 1),
-                                                 W=self.W.dimshuffle(0, 3, 4, 2, 1),
-                                                 b=self.b, d=self.subsample)
+            conv_out = T.nnet.conv3D(V=X.dimshuffle(0, 3, 4, 2, 1),
+                                     W=self.W.dimshuffle(0, 3, 4, 2, 1),
+                                     b=self.b, d=self.subsample)
             conv_out = conv_out.dimshuffle(0, 4, 3, 1, 2)
             self.W = self.W.dimshuffle(0, 4, 3, 1, 2)
 
@@ -392,20 +407,20 @@ class Convolution3D(Layer):
 
     def get_config(self):
           return {"name": self.__class__.__name__,
-                    "nb_filter": self.nb_filter,
-                    "stack_size": self.stack_size,
-                    "nb_row": self.nb_row,
-                    "nb_col": self.nb_col,
-                    "nb_depth": self.nb_depth,
-                    "init": self.init.__name__,
-                    "activation": self.activation.__name__,
-                    "border_mode": self.border_mode,
-                    "subsample": self.subsample,
-                    "W_regularizer": self.W_regularizer.get_config() if self.W_regularizer else None,
-                    "b_regularizer": self.b_regularizer.get_config() if self.b_regularizer else None,
-                    "activity_regularizer": self.activity_regularizer.get_config() if self.activity_regularizer else None,
-                    "W_constraint": self.W_constraint.get_config() if self.W_constraint else None,
-                    "b_constraint": self.b_constraint.get_config() if self.b_constraint else None}
+                   "nb_filter": self.nb_filter,
+                   "stack_size": self.stack_size,
+                   "nb_depth": self.nb_depth,
+                   "nb_row": self.nb_row,
+                   "nb_col": self.nb_col,
+                   "init": self.init.__name__,
+                   "activation": self.activation.__name__,
+                   "border_mode": self.border_mode,
+                   "subsample": self.subsample,
+                   "W_regularizer": self.W_regularizer.get_config() if self.W_regularizer else None,
+                   "b_regularizer": self.b_regularizer.get_config() if self.b_regularizer else None,
+                   "activity_regularizer": self.activity_regularizer.get_config() if self.activity_regularizer else None,
+                   "W_constraint": self.W_constraint.get_config() if self.W_constraint else None,
+                   "b_constraint": self.b_constraint.get_config() if self.b_constraint else None}
 
 
 class MaxPooling1D(Layer):
@@ -506,26 +521,15 @@ class MaxPooling3D(Layer):
     def get_output(self, train):
         X = self.get_input(train)
 
-        if on_gpu() and dnn.dnn_available():
-            if self.ignore_border:
-                output = dnn.dnn_pool(img=X, ws=self.pool_size, stride=self.stride, mode=self.mode)
-            else:
-                pad_z = (self.pool_size[0] - self.stride[0]) // 2
-                pad_x = (self.pool_size[1] - self.stride[0]) // 2
-                pad_y = (self.pool_size[2] - self.stride[0]) // 2
+        # pooling over X, Z (last two channels)
+        output = downsample.max_pool_2d(input=X.dimshuffle(0, 1, 4, 3, 2),
+                                        ds=(self.pool_size[1], self.pool_size[0]),
+                                        ignore_border=self.ignore_border)
 
-                output = dnn.dnn_pool(img=X, ws=self.pool_size, stride=self.stride, mode=self.mode,
-                                      pad=(pad_z, pad_x, pad_y))
-        else:
-            # pooling over X, Z (last two channels)
-            output = downsample.max_pool_2d(input=X.dimshuffle(0, 1, 4, 3, 2),
-                                            ds=(self.pool_size[1], self.pool_size[0]),
-                                            ignore_border=self.ignore_border)
-
-            # max_pool_2d X and Y, X constant
-            output = downsample.max_pool_2d(input=output.dimshuffle(0, 1, 4, 3, 2),
-                                            ds=(1, self.pool_size[2]),
-                                            ignore_border=self.ignore_border)
+        # max_pool_2d X and Y, X constant
+        output = downsample.max_pool_2d(input=output.dimshuffle(0, 1, 4, 3, 2),
+                                        ds=(1, self.pool_size[2]),
+                                        ignore_border=self.ignore_border)
         return output
 
     def get_config(self):
