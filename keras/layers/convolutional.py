@@ -358,26 +358,29 @@ class Convolution3D(Layer):
         border_mode = self.border_mode
 
         # Both conv3d2d.conv3d and nnet.conv3D only support the 'valid' border mode
-        if border_mode == 'same' or border_mode == 'full':
-                if border_mode == 'same':
-                    assert(self.subsample == (1, 1, 1))
+        if border_mode != 'valid':
+            if border_mode == 'same':
+                assert(self.subsample == (1, 1, 1))
+                pad_z = (self.nb_depth - self.subsample[0])
+                pad_x = (self.nb_row - self.subsample[1])
+                pad_y = (self.nb_col - self.subsample[2])
+            else: #full
+                pad_z = (self.nb_depth - 1) * 2
+                pad_x = (self.nb_row - 1)   * 2
+                pad_y = (self.nb_col - 1)   * 2
 
-                pad_z = (self.nb_depth - self.subsample[0]) // 2
-                pad_x = (self.nb_row - self.subsample[1]) // 2
-                pad_y = (self.nb_col - self.subsample[2]) // 2
+            input_shape = X.shape
+            output_shape = (input_shape[0], input_shape[1],
+                            input_shape[2] + pad_z,
+                            input_shape[3] + pad_x,
+                            input_shape[4] + pad_y)
+            output = T.zeros(output_shape)
+            indices = (slice(None), slice(None),
+                       slice(pad_z//2, input_shape[2] + pad_z//2),
+                       slice(pad_x//2, input_shape[3] + pad_x//2),
+                       slice(pad_y//2, input_shape[4] + pad_y//2))
+            X = T.set_subtensor(output[indices], X)
 
-                input_shape = X.shape
-                output_shape = (input_shape[0], input_shape[1],
-                                input_shape[2] + 2 * pad_z,
-                                input_shape[3] + 2 * pad_x,
-                                input_shape[4] + 2 * pad_y)
-                output = T.zeros(output_shape)
-                indices = (slice(None), slice(None),
-                           slice(pad_z, input_shape[2] + pad_z),
-                           slice(pad_x, input_shape[3] + pad_x),
-                           slice(pad_y, input_shape[4] + pad_y))
-                T.set_subtensor(output[indices], X)
-                X = output
 
         border_mode = 'valid'
 
@@ -393,14 +396,14 @@ class Convolution3D(Layer):
 
             conv_out = conv_out.dimshuffle(0, 2, 1, 3, 4)
             self.W = self.W.dimshuffle(0, 2, 1, 3, 4)
-            
         else:
             # Shuffle the dimensions as per the input parameter order, restore it once done
-            conv_out = T.nnet.conv3D(V=X.dimshuffle(0, 3, 4, 2, 1),
-                                     W=self.W.dimshuffle(0, 3, 4, 2, 1),
+            W1 = self.W.dimshuffle(0, 1, 3, 4, 2)
+            conv_out = T.nnet.conv3D(V=X.dimshuffle(0, 2, 3, 4, 1),
+                                     W= W1,
                                      b=self.b, d=self.subsample)
-            conv_out = conv_out.dimshuffle(0, 4, 3, 1, 2)
-            self.W = self.W.dimshuffle(0, 4, 3, 1, 2)
+            conv_out = conv_out.dimshuffle(0, 4, 1, 2, 3)
+            self.W = self.W.dimshuffle(0, 4, 1, 2, 3)
 
         output = self.activation(conv_out + self.b.dimshuffle('x', 0, 'x', 'x', 'x'))
         return output
