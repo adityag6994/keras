@@ -366,8 +366,8 @@ class Convolution3D(Layer):
                 pad_y = (self.nb_col - self.subsample[2])
             else: #full
                 pad_z = (self.nb_depth - 1) * 2
-                pad_x = (self.nb_row - 1)   * 2
-                pad_y = (self.nb_col - 1)   * 2
+                pad_x = (self.nb_row - 1) * 2
+                pad_y = (self.nb_col - 1) * 2
 
             input_shape = X.shape
             output_shape = (input_shape[0], input_shape[1],
@@ -398,9 +398,10 @@ class Convolution3D(Layer):
             self.W = self.W.dimshuffle(0, 2, 1, 3, 4)
         else:
             # Shuffle the dimensions as per the input parameter order, restore it once done
-            W1 = self.W.dimshuffle(0, 1, 3, 4, 2)
+            # W1 = self.W.dimshuffle(0, 1, 3, 4, 2)
+            self.W = self.W.dimshuffle(0, 2, 3, 4 , 1)
             conv_out = T.nnet.conv3D(V=X.dimshuffle(0, 2, 3, 4, 1),
-                                     W= W1,
+                                     W=self.W,
                                      b=self.b, d=self.subsample)
             conv_out = conv_out.dimshuffle(0, 4, 1, 2, 3)
             self.W = self.W.dimshuffle(0, 4, 1, 2, 3)

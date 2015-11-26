@@ -41,14 +41,11 @@ patch_size = 32
 print('X_train shape:', X_train.shape)
 print(X_train.shape[0], 'train samples')
 print(X_test.shape[0], 'test samples')
-#
-# import IPython
-# IPython.embed()
 
 # CNN Training parameters
 batch_size = 10
 nb_classes = 2
-nb_epoch = 0
+nb_epoch = 100
 
 # convert class vectors to binary class matrices
 Y_train = np_utils.to_categorical(Y_train, nb_classes)
@@ -61,14 +58,14 @@ nb_filters = [16, 32]
 nb_pool = [3, 3]
 
 # level of convolution to perform at each layer (CONV x CONV)
-nb_conv = [6, 4]
+nb_conv = [7, 3]
 
 model = Sequential()
-model.add(Convolution3D(nb_filters[0],nb_depth=nb_conv[0], nb_row=nb_conv[0], nb_col=nb_conv[0], border_mode='same',
+model.add(Convolution3D(nb_filters[0],nb_depth=nb_conv[0], nb_row=nb_conv[0], nb_col=nb_conv[0], border_mode='full',
                         input_shape=(1, patch_size, patch_size, patch_size), activation='relu'))
 model.add(MaxPooling3D(pool_size=(nb_pool[0], nb_pool[0], nb_pool[0])))
 model.add(Dropout(0.5))
-model.add(Convolution3D(nb_filters[1],nb_depth=nb_conv[1], nb_row=nb_conv[1], nb_col=nb_conv[1], border_mode='same',
+model.add(Convolution3D(nb_filters[1],nb_depth=nb_conv[1], nb_row=nb_conv[1], nb_col=nb_conv[1], border_mode='full',
                         activation='relu'))
 model.add(MaxPooling3D(pool_size=(nb_pool[1], nb_pool[1], nb_pool[1])))
 model.add(Flatten())
@@ -87,14 +84,3 @@ print('Test score:', score[0])
 print('Test accuracy:', score[1])
 
 
-# compiling a function for feature extraction
-layer_id = 0
-model.extract_features = theano.function(
-            [model.layers[0].input],
-            model.layers[layer_id].get_output(False),
-            on_unused_input='ignore', allow_input_downcast=True)
-
-output = model.extract_features(X_test[0:1, :])
-import IPython
-IPython.embed()
-print "output size of layer : "+ str(layer_id) +" has shape "+str(output.shape)
