@@ -410,9 +410,8 @@ class Convolution3D(Layer):
         return output
 
     def get_config(self):
-          return {"name": self.__class__.__name__,
+          config = {"name": self.__class__.__name__,
                    "nb_filter": self.nb_filter,
-                   "stack_size": self.stack_size,
                    "nb_depth": self.nb_depth,
                    "nb_row": self.nb_row,
                    "nb_col": self.nb_col,
@@ -425,6 +424,8 @@ class Convolution3D(Layer):
                    "activity_regularizer": self.activity_regularizer.get_config() if self.activity_regularizer else None,
                    "W_constraint": self.W_constraint.get_config() if self.W_constraint else None,
                    "b_constraint": self.b_constraint.get_config() if self.b_constraint else None}
+          base_config = super(Convolution3D, self).get_config()
+          return dict(list(base_config.items()) + list(config.items()))
 
 
 class MaxPooling1D(Layer):
